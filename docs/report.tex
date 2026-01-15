@@ -1,0 +1,101 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage{booktabs}
+\usepackage{geometry}
+\geometry{margin=1in}
+
+\title{Crazy Schnitzel Sauce \& Upsell Models}
+\author{ML\_Project}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\section{Problemă \& Dataset}
+Datele provin din bonuri fiscale; fiecare linie reprezintă un produs dintr-un bon. Interval: 2025-09-05 -- 2025-12-03, \textasciitilde{}7{,}869 bonuri, 28{,}039 linii, 59 produse unice. Coș mediu: 3.56 produse/bon (max 26). Lista sosuri standalone: Crazy, Cheddar, Extra Cheddar, Garlic, Tomato, Blueberry, Spicy, Pink.
+
+\paragraph{Cerințe}
+\begin{itemize}
+  \item 2.1: Regresie logistică binară --- dacă un bon cu \textbf{Crazy Schnitzel} conține și \textbf{Crazy Sauce}.
+  \item 2.2: Câte un model logistic pentru fiecare sos + pseudo-recomandare Top-K pe coș fără sos.
+  \item Ranking upsell: dat un coș parțial, recuperăm produsul ascuns (Hit@K), folosind un scor $P(p \mid coș)\cdot price(p)$.
+\end{itemize}
+
+\section{Preprocesare}
+\begin{itemize}
+  \item Conversie \texttt{data\_bon} la \texttt{datetime}; derivare \texttt{day\_of\_week} (1--7), \texttt{hour\_of\_day}, \texttt{is\_weekend}.
+  \item Agregări pe bon: \texttt{cart\_size}, \texttt{distinct\_products}, \texttt{total\_value}.
+  \item Vector produse: număr de apariții per produs (\texttt{binary\_counts} opțional). Pentru modele de sos, coloana sosului curent se elimină (evităm scurgeri).
+  \item Interacțiuni opționale: (Crazy Schnitzel, French fries/Baked potatoes/Aqua Carpatica).
+  \item Split pe bonuri: temporal (implicit) sau aleator cu stratificare; test-size 20\%.
+  \item Ranking: se construiesc coșuri parțiale eliminând aleator un produs eligibil; prețul mediu per produs folosit în scor.
+\end{itemize}
+
+\section{Modele}
+\paragraph{Regresie Logistică (custom GD)} Implementare proprie cu standardizare internă, gradient descent batch, oprire la toleranță, L2 opțional. Folosește doar \texttt{numpy}.
+
+\paragraph{Regresie Logistică (sklearn)} Pipeline \texttt{StandardScaler} + \texttt{LogisticRegression} pentru referință.
+
+\paragraph{Per-sauce (2.2)} Un model logistic per sos; metricile se calculează pe test; recomandarea Top-K ordonează sosurile după probabilități prezise, comparat cu baseline de popularitate.
+
+\paragraph{Ranking upsell} Bernoulli Naive Bayes (custom) pe prezență de produse; scorul final: $score(p \mid coș)=P(p\mid coș)\cdot price(p)$. Baseline: popularitate globală și venit global (contor $\times$ preț).
+
+\section{Rezultate}
+\subsection{2.1 Crazy Sauce (coș conține Crazy Schnitzel, split temporal 80/20)}
+\begin{center}
+\begin{tabular}{lccccc}
+\toprule
+Model & Acc & Prec & Rec & F1 & ROC-AUC \\
+\midrule
+Majority (tot timpul 1) & 0.476 & 0.476 & 1.000 & 0.645 & 0.500 \\
+LogReg sklearn & 0.933 & 0.906 & 0.959 & 0.931 & 0.962 \\
+LogReg custom GD & \textbf{0.938} & 0.925 & 0.947 & \textbf{0.936} & \textbf{0.967} \\
+\bottomrule
+\end{tabular}
+\end{center}
+Matrice confuzie (custom GD): $\begin{bmatrix}174 & 13\\ 9 & 161\end{bmatrix}$ (TN, FP / FN, TP).
+
+Coeficienți majori (custom GD): pozitivi --- cart\_size, distinct\_products, total\_value, Baked potatoes, băuturi cola; negativi --- alte sosuri standalone (Cheddar, Garlic, Blueberry, Tomato, Spicy, Pink) și produse deja cu sos (Crazy Fries cu Cheddar).
+
+\subsection{2.2 Per-sauce + recomandare (split temporal 80/20, Top-3)}
+\begin{center}
+\begin{tabular}{lcccc}
+\toprule
+Sos & Acc & Prec & Rec & ROC-AUC \\
+\midrule
+Crazy Sauce & 0.681 & 0.334 & 0.759 & 0.751 \\
+Cheddar Sauce & 0.867 & 0.653 & 0.142 & 0.760 \\
+Extra Cheddar Sauce & 0.996 & 0.000 & 0.000 & 0.956 \\
+Garlic Sauce & 0.895 & 0.375 & 0.097 & 0.760 \\
+Tomato Sauce & 0.974 & 1.000 & 0.024 & 0.809 \\
+Blueberry Sauce & 0.673 & 0.130 & 0.409 & 0.706 \\
+Spicy Sauce & 0.811 & 0.110 & 0.397 & 0.739 \\
+Pink Sauce & 0.974 & 0.167 & 0.061 & 0.807 \\
+\bottomrule
+\end{tabular}
+\end{center}
+Recomandare Top-3 (baskets cu sos în test, $n=829$): Hit@3 = 0.744 vs baseline popularitate 0.726; Precision@3 = 0.270 vs 0.268.
+
+\subsection{Ranking upsell (coș parțial, min 20 apariții produs, split temporal 80/20)}
+\begin{center}
+\begin{tabular}{lccc}
+\toprule
+K & Model Hit@K & Popularitate Hit@K & Venit Hit@K \\
+\midrule
+1 & 0.225 & 0.093 & 0.109 \\
+3 & 0.387 & 0.217 & 0.182 \\
+5 & 0.468 & 0.320 & 0.275 \\
+\bottomrule
+\end{tabular}
+\end{center}
+Evaluat pe 1{,}518 coșuri parțiale. Modelul NB + preț depășește consistent bazele.
+
+\section{Concluzii \& îmbunătățiri}
+\begin{itemize}
+  \item Modelul logistic custom atinge performanța sklearn; principalele semnale sunt dimensiunea/varietatea coșului și substituția între sosuri.
+  \item Recomandarea per-sos depășește popularitatea, dar sosurile rare (Extra Cheddar, Pink) au recall mic; ar ajuta undersampling/oversampling sau modele ierarhice.
+  \item Ranking NB + preț bate popularitatea/venitul, dar poate fi rafinat cu modele secvențiale (item2vec), factorization machines, sau calibrare mai bună a probabilităților.
+  \item Grafică potențială: ROC-uri per sos, matrice de confuzie pentru 2.1, curbe Hit@K; pot fi generate din codul existent pentru completarea raportului.
+\end{itemize}
+
+\end{document}
