@@ -1,11 +1,13 @@
 \documentclass[11pt,a4paper]{article}
 \usepackage[utf8]{inputenc}
 \usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{amsmath}
 \usepackage{geometry}
 \geometry{margin=1in}
 
-\title{Crazy Schnitzel Sauce \& Upsell Models}
-\author{ML\_Project}
+\title{Practical Assignment – Machine Learning}
+\author{Mazilu Cosmin-Alexandru \\ Mardare Andrei Daniel}
 \date{\today}
 
 \begin{document}
@@ -14,20 +16,13 @@
 \section{Problemă \& Dataset}
 Datele provin din bonuri fiscale; fiecare linie reprezintă un produs dintr-un bon. Interval: 2025-09-05 -- 2025-12-03, \textasciitilde{}7{,}869 bonuri, 28{,}039 linii, 59 produse unice. Coș mediu: 3.56 produse/bon (max 26). Lista sosuri standalone: Crazy, Cheddar, Extra Cheddar, Garlic, Tomato, Blueberry, Spicy, Pink.
 
-\paragraph{Cerințe}
-\begin{itemize}
-  \item 2.1: Regresie logistică binară --- dacă un bon cu \textbf{Crazy Schnitzel} conține și \textbf{Crazy Sauce}.
-  \item 2.2: Câte un model logistic pentru fiecare sos + pseudo-recomandare Top-K pe coș fără sos.
-  \item Ranking upsell: dat un coș parțial, recuperăm produsul ascuns (Hit@K), folosind un scor $P(p \mid coș)\cdot price(p)$.
-\end{itemize}
-
 \section{Preprocesare}
 \begin{itemize}
   \item Conversie \texttt{data\_bon} la \texttt{datetime}; derivare \texttt{day\_of\_week} (1--7), \texttt{hour\_of\_day}, \texttt{is\_weekend}.
   \item Agregări pe bon: \texttt{cart\_size}, \texttt{distinct\_products}, \texttt{total\_value}.
   \item Vector produse: număr de apariții per produs (\texttt{binary\_counts} opțional). Pentru modele de sos, coloana sosului curent se elimină (evităm scurgeri).
   \item Interacțiuni opționale: (Crazy Schnitzel, French fries/Baked potatoes/Aqua Carpatica).
-  \item Split pe bonuri: temporal (implicit) sau aleator cu stratificare; test-size 20\%.
+  \item Split pe bonuri: bonurile au fost despărțite in ordine temporala: primele 80\% din bonuri au fost folosite pentru antrenare si restul de 20\% au fost folosite pentru testare.
   \item Ranking: se construiesc coșuri parțiale eliminând aleator un produs eligibil; prețul mediu per produs folosit în scor.
 \end{itemize}
 
@@ -42,6 +37,13 @@ Datele provin din bonuri fiscale; fiecare linie reprezintă un produs dintr-un b
 
 \section{Rezultate}
 \subsection{2.1 Crazy Sauce (coș conține Crazy Schnitzel, split temporal 80/20)}
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.45\textwidth]{confusion_matrix_crazy.png}
+    \includegraphics[width=0.45\textwidth]{roc_curve_crazy.png}
+    \caption{Matricea de confuzie și Curba ROC pentru predicția Crazy Sauce}
+    \label{fig:crazy_res}
+\end{figure}
 \begin{center}
 \begin{tabular}{lccccc}
 \toprule
@@ -58,6 +60,12 @@ Matrice confuzie (custom GD): $\begin{bmatrix}174 & 13\\ 9 & 161\end{bmatrix}$ (
 Coeficienți majori (custom GD): pozitivi --- cart\_size, distinct\_products, total\_value, Baked potatoes, băuturi cola; negativi --- alte sosuri standalone (Cheddar, Garlic, Blueberry, Tomato, Spicy, Pink) și produse deja cu sos (Crazy Fries cu Cheddar).
 
 \subsection{2.2 Per-sauce + recomandare (split temporal 80/20, Top-3)}
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.8\textwidth]{roc_curves_per_sauce.png}
+    \caption{Curbe ROC comparative pentru modelele per-sos}
+    \label{fig:persauce_roc}
+\end{figure}
 \begin{center}
 \begin{tabular}{lcccc}
 \toprule
@@ -77,6 +85,12 @@ Pink Sauce & 0.974 & 0.167 & 0.061 & 0.807 \\
 Recomandare Top-3 (baskets cu sos în test, $n=829$): Hit@3 = 0.744 vs baseline popularitate 0.726; Precision@3 = 0.270 vs 0.268.
 
 \subsection{Ranking upsell (coș parțial, min 20 apariții produs, split temporal 80/20)}
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.8\textwidth]{ranking_hit_k.png}
+    \caption{Performanța Hit@K pentru modelul de ranking vs baseline}
+    \label{fig:ranking_metrics}
+\end{figure}
 \begin{center}
 \begin{tabular}{lccc}
 \toprule
