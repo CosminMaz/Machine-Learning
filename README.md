@@ -26,3 +26,9 @@ Opțiuni utile:
 
 ## Raport
 Compilează cu `pdflatex docs/report.tex` (de 2 ori pentru referințe). Output: `docs/report.pdf`.
+
+## Contributie proiect
+
+- Mardare Andrei Daniel -> 2.1), 2.2)
+
+- Mazilu Cosmin Alexandru -> 3), 4)
